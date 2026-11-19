@@ -57,3 +57,9 @@ Settings → Pages → Build and deployment 的 Source 设为 **GitHub Actions**
 项目预期地址：`https://lidan1119.github.io/happycoding/`。需要 Actions 部署成功后再访问。相对资源路径支持项目子目录，无须服务器路由重写。
 
 剧情规划和验收规格见 `openspec/changes/tomorrow-closed/`。已知发布限制：当前云实例访问 GitHub API 和 Pages 域名被环境策略拒绝，Git 推送可用；应以 GitHub Actions 和浏览器实际访问结果确认上线，不能将成功推送等同于部署成功。
+
+## 把家搬到地球另一边
+
+从首页点「地球的另一边」，或在开发服务器打开 `/earth.html`。可搜索约 1,250 个城市、拖动并点击地球，或填写经纬度。穿过地心后可复制能够重开同一落点的结果链接。支持浏览器减少动效设置，WebGL 不可用时可在平面地图上选点。
+
+城市、陆地与海岸采用 Natural Earth v5.1.2 的 1:50m 数据。水域距离为沿球面的最近海岸距离，受海岸线分辨率限制，小岛与狭窄水道可能无法识别。数据编译脚本为 `scripts/prepare-earth-data.py`，地表纹理来自 Three.js 示例。部署使用已有的 GitHub Pages 工作流，工作流结束前会请求发布后的地球页面。

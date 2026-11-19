@@ -2525,3 +2525,15 @@ textarea {
     top: 105px;
   }
 }
+
+.earth-link {
+  color: var(--lime);
+  font-size: 12px;
+  text-underline-offset: 4px;
+  white-space: nowrap;
+}
+@media (max-width: 450px) {
+  header:has(.earth-link) .open {
+    display: none;
+  }
+}

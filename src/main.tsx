@@ -170,7 +170,9 @@ function App() {
         <span className="open">
           <i /> 营业中 · 直到宇宙打烊
         </span>
-        <span className="edition">VOL. 002 / 明天暂停营业</span>
+        <a className="earth-link" href="./earth.html">
+          地球的另一边 ↗
+        </a>
       </header>
       <main id="main" className={view === "adventure" ? "game-main" : ""}>
         {view === "adventure" && run ? (

@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   build: {
     rollupOptions: {
+      input: { shop: "index.html", earth: "earth.html" },
       output: {
         manualChunks(id) {
           if (id.includes("/three/"))
