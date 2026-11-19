@@ -14,7 +14,8 @@ import {
 } from "./adventure.ts";
 import { products } from "./shop.ts";
 import { SceneBoundary } from "./SceneBoundary.tsx";
-import { Portrait } from "./Portrait.tsx";
+import { useDialogueVoice } from "./dialogueVoice.ts";
+import { stageFor, cast, type Npc } from "./staging.ts";
 const World = lazy(() => import("./World.tsx"));
 type Props = {
   run: State;
@@ -84,24 +85,37 @@ export function AdventureView({
   useEffect(() => {
     if (deciding) decisionHeading.current?.focus({ preventScroll: true });
   }, [deciding]);
-  const kind =
-    node.speaker.includes("猫") ||
-    node.id.startsWith("cat") ||
-    node.id === "roof-chase"
-      ? "cat"
-      : node.speaker.includes("司机") ||
-          node.id.includes("bus") ||
-          node.id.includes("driver")
-        ? "driver"
-        : node.speaker.includes("实习生") || node.id.includes("clerk")
-          ? "clerk"
-          : node.speaker.includes("店主")
-            ? "keeper"
-            : "narrator";
+  const stage = stageFor(node, line);
+  const voice = useDialogueVoice();
+  const audioLine = final
+    ? node.text.join("。")
+    : deciding
+      ? ""
+      : node.text[line];
+  const primaryNpc = stage.npcs.length === 1 ? stage.npcs[0] : undefined;
+  const voiceRef = useRef(voice);
+  voiceRef.current = voice;
+  const talk = (description: string, npc?: Npc) => {
+    setInspection(npc ? `${cast[npc].name}：“${description}”` : description);
+    if (npc && voice.enabled) voice.speak(description, npc);
+  };
+  useEffect(() => {
+    if (voiceRef.current.enabled && audioLine)
+      voiceRef.current.speak(audioLine, primaryNpc);
+    else voiceRef.current.stop();
+  }, [node.id, line, audioLine, primaryNpc]);
   const inspect = () => {
-    setInspection(observations[node.act - 1][look % 3]);
+    const subjects = [
+      ...stage.npcs.map((id) => `${cast[id].name}：“${cast[id].line}”`),
+      ...observations[node.act - 1],
+    ];
+    setInspection(subjects[look % subjects.length]);
     setLook(look + 1);
   };
+  useEffect(() => {
+    setInspection("");
+    setLook(0);
+  }, [node.id, stage.beat]);
   const advance = () => {
     setLine(Math.min(line + 1, node.text.length));
     next.current?.focus({ preventScroll: true });
@@ -115,7 +129,7 @@ export function AdventureView({
               <div className="world loading-world">正在点亮街角的灯…</div>
             }
           >
-            <World act={node.act} ending={final} onInspect={setInspection} />
+            <World stage={stage} ending={final} onInspect={talk} />
           </Suspense>
         </SceneBoundary>
       </div>
@@ -132,20 +146,50 @@ export function AdventureView({
         </div>
         <div className="hud-right">
           <button onClick={inspect}>⌖ 环顾四周</button>
+          {voice.supported && (
+            <button
+              aria-pressed={voice.enabled}
+              onClick={() => {
+                if (voice.enabled) voice.stop();
+                else voice.speak(audioLine || "语音已开启。", primaryNpc);
+                voice.setEnabled(!voice.enabled);
+              }}
+            >
+              {voice.enabled ? "关闭语音" : "开启语音"}
+            </button>
+          )}
           <button onClick={() => drawer.current?.showModal()}>
             ☷ 行囊与足迹
           </button>
         </div>
       </nav>
-      <div className="scene-caption" key={node.id}>
+      <div className="scene-caption" key={`${node.id}-${stage.beat}`}>
         <span>PARALLEL LIFE / 0{node.act}</span>
-        <h2>{node.place}</h2>
+        <h2>
+          {node.id === "opening" && stage.set === "street"
+            ? "宇宙拐角 · 店外"
+            : node.place}
+        </h2>
         <div className="scene-dots" aria-label={`第${node.act}幕`}>
           {acts.map((a, i) => (
             <i key={a} className={i < node.act ? "lit" : ""} />
           ))}
         </div>
       </div>
+      {!final && stage.npcs.length > 0 && (
+        <div className="npc-actions" role="group" aria-label="交谈对象">
+          {stage.npcs.map((id) => (
+            <button key={id} onClick={() => talk(cast[id].line, id)}>
+              与{cast[id].name}交谈
+            </button>
+          ))}
+        </div>
+      )}
+      {voice.enabled && voice.failed && (
+        <p className="voice-warning" role="status">
+          当前设备没有可用的中文语音。你可以继续阅读字幕。
+        </p>
+      )}
       {inspection && (
         <div className="inspection" role="status">
           <span>⌖ 你注意到</span>
@@ -213,31 +257,13 @@ export function AdventureView({
         </section>
       ) : (
         <>
-          <div className={`stage-character ${deciding ? "at-decision" : ""}`}>
-            <>
-              {kind === "narrator" ? (
-                <div className="narrator-token">
-                  <small>宇宙临时通知</small>
-                  <b>
-                    明天
-                    <br />
-                    暂停营业
-                  </b>
-                  <i>已售能力不退</i>
-                </div>
-              ) : (
-                <Portrait kind={kind} />
-              )}
-            </>
-            <span>{node.speaker}</span>
-          </div>
           <section
             className={`dialogue-stage narrative ${deciding ? "decision-mode" : ""}`}
             aria-label="剧情对话"
             key={node.id}
           >
             <div className="dialogue-top">
-              <span className="dialogue-speaker">{node.speaker}</span>
+              <span className="dialogue-speaker">{stage.speaker}</span>
               <h1 ref={heading} tabIndex={-1}>
                 {node.title}
               </h1>

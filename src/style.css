@@ -2479,3 +2479,49 @@ textarea {
   font-size: 11px;
   padding: 5px;
 }
+
+.npc-actions {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: min(100%, 1020px);
+  margin: 32vh auto 9px;
+}
+.npc-actions + .dialogue-stage {
+  margin-top: 0;
+}
+.npc-actions button {
+  background: #101827e8;
+  border: 1px solid #c3df91;
+  border-radius: 16px;
+  padding: 8px 13px;
+  color: #eaf4d4;
+  font-size: 12px;
+}
+.npc-actions button:hover {
+  background: #304529;
+}
+.voice-warning {
+  position: absolute;
+  top: 92px;
+  left: 20px;
+  z-index: 4;
+  background: #172131;
+  color: #f4d2ae;
+  padding: 6px 10px;
+  font-size: 11px;
+}
+@media (max-width: 700px) {
+  .npc-actions button {
+    font-size: 10px;
+    padding: 7px 10px;
+  }
+  .npc-actions {
+    margin-top: 31vh;
+  }
+  .voice-warning {
+    top: 105px;
+  }
+}

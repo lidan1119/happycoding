@@ -1,21 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-const labels = [
-  "宇宙拐角 · 午夜便利店",
-  "以后再说站 · 末班车进站",
-  "失物招领处 · 明天档案馆",
-  "最后一座桥 · 城市停电中",
-  "午夜天台 · 天亮之前",
-];
+import { cast, sets, type Npc, type Stage } from "./staging.ts";
+
 export default function World({
-  act = 1,
+  stage,
   ending = false,
   onInspect,
 }: {
-  act?: number;
+  stage: Stage;
   ending?: boolean;
-  onInspect?: (description: string) => void;
+  onInspect?: (description: string, npc?: Npc) => void;
 }) {
+  const { set } = stage;
+  const current = useRef(stage);
+  current.current = stage;
+  const redraw = useRef<() => void>(() => {});
+  useEffect(() => {
+    redraw.current();
+  }, [stage.beat, stage.focus, stage.npcs.join(",")]);
   const host = useRef<HTMLDivElement>(null);
   const inspectionCallback = useRef(onInspect);
   inspectionCallback.current = onInspect;
@@ -40,18 +42,11 @@ export default function World({
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     el.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
-    const bg = ending
-      ? "#343756"
-      : act === 4
-        ? "#101829"
-        : act === 3
-          ? "#1e1936"
-          : "#131d32";
+    const bg = ending ? "#554653" : sets[set].color;
     scene.background = new THREE.Color(bg);
     scene.fog = new THREE.Fog(bg, 24, 65);
     const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
-    camera.position.set(act === 3 ? 14 : 16, act === 4 ? 11 : 13, 22);
-    camera.lookAt(0, -1, 0);
+
     const ambient = new THREE.HemisphereLight(0xa5c7ff, 0x31263e, 2);
     scene.add(ambient);
     const sun = new THREE.DirectionalLight(ending ? 0xffd2a8 : 0xaabaff, 3);
@@ -78,7 +73,10 @@ export default function World({
       glass = mat(0x355c6d, 0x1c3b4a),
       coral = mat(0xf0ac92, 0x86432d),
       cream = mat(0xd7d3be),
-      window = mat(act === 4 ? 0x353742 : 0xe4d49d, act === 4 ? 0 : 0x7b622b);
+      window = mat(
+        set === "bridge" ? 0x353742 : 0xe4d49d,
+        set === "bridge" ? 0 : 0x7b622b,
+      );
     const box = (
       w: number,
       h: number,
@@ -143,7 +141,7 @@ export default function World({
       plane.userData.inspect = `路牌上写着「${text}」。你伸手碰了一下，字还暖着。`;
       parent.add(plane);
     };
-    if (act === 1) {
+    if (set === "street") {
       box(6, 2.6, 4, 0, 1.3, 0, blue).userData.inspect =
         "店门上的营业时间写着：直到你愿意出发。店主留下的灯还亮着。";
       box(6.4, 0.35, 4.4, 0, 2.8, 0, lime);
@@ -154,21 +152,21 @@ export default function World({
       box(1.1, 1.5, 0.9, 4, 0.75, 1, coral);
       sign("明天有售", 0.95, 0.4, 4, 1.1, 1.46, "#fff2d4");
       box(1, 0.8, 1, -4, 0.4, 2, cream);
-    } else if (act === 2 || act === 5) {
+    } else if (set === "station" || set === "bus") {
       box(14, 0.5, 3, 0, 0.4, 1, edge);
       for (const x of [-5, 5]) {
         box(0.18, 3, 0.18, x, 1.8, -0.4, coral);
       }
       box(13, 0.2, 2, -0.1, 3.4, -0.4, blue);
       sign(
-        act === 2 ? "0 路 · 以后再说站" : "末班车 · 未知站",
+        set === "station" ? "0 路 · 以后再说站" : "末班车 · 未知站",
         6,
         0.8,
         0,
         2.6,
         0.65,
       );
-    } else if (act === 3) {
+    } else if (set === "archive") {
       box(8, 4, 4, 0, 2, -1, blue).userData.inspect =
         "窗里存着尚未发生的清晨。窗外的人，却被默认放弃了它们。";
       box(8.4, 0.3, 4.4, 0, 4.1, -1, coral);
@@ -184,7 +182,7 @@ export default function World({
           2.5 - i * 0.2,
           edge,
         );
-    } else {
+    } else if (set === "bridge" || set === "console") {
       box(17, 0.4, 3, 0, 1, 1, edge);
       for (const x of [-7, 7]) {
         box(0.3, 5, 0.3, x, 2.2, 1, blue);
@@ -194,8 +192,125 @@ export default function World({
       box(1.7, 1, 0.8, 5, 1.7, 2, lime);
       sign("明天控制台", 2.4, 0.6, 5, 2.4, 2.44);
     }
+    if (["shop", "office", "board", "queue", "bakery", "home"].includes(set)) {
+      const warm = set === "shop" || set === "bakery" || set === "home";
+      box(16, 0.2, 12, 0, 0, 0, edge);
+      box(16, 6, 0.3, 0, 3, -4, warm ? coral : blue);
+      box(0.3, 6, 8, -8, 3, 0, blue);
+      sign(
+        sets[set].label,
+        7,
+        0.9,
+        0,
+        4.5,
+        -3.81,
+        warm ? "#fff0ba" : "#d4f784",
+      );
+      if (set === "board") {
+        box(8, 0.24, 2.6, 0, 1.25, 0, cream);
+        for (const x of [-3, -1, 1, 3]) box(0.8, 1, 0.8, x, 0.5, -2, coral);
+      } else {
+        box(6, 1.2, 1.2, 0, 0.6, -1, blue);
+        box(6.2, 0.16, 1.45, 0, 1.25, -1, cream);
+        if (set === "shop") {
+          box(1.1, 0.55, 0.65, 0, 1.61, -0.7, dark);
+          sign("明天暂停营业", 2.2, 0.52, 0, 2, -0.31);
+          box(0.39, 0.025, 0.55, 0.47, 1.36, -0.08, cream);
+        }
+        if (set === "bakery") {
+          box(0.95, 0.35, 0.95, 0, 1.55, -0.65, coral);
+          for (const x of [-0.25, 0, 0.25])
+            box(0.06, 0.34, 0.06, x, 1.87, -0.7, lime);
+        }
+        if (set === "home") {
+          box(1.7, 3, 0.15, -4, 1.5, -3.75, cream);
+          box(0.8, 0.12, 1, 3, 1.42, -1, coral);
+        }
+        for (const x of [-5, 5]) {
+          box(2.5, 3, 0.5, x, 1.5, -3, edge);
+          for (let row = 0; row < 3; row++)
+            for (let col = 0; col < 4; col++)
+              box(
+                0.32,
+                0.46,
+                0.46,
+                x - 0.85 + col * 0.53,
+                0.55 + row * 0.88,
+                -2.55,
+                (row + col) % 2 ? coral : glass,
+              );
+        }
+      }
+    }
+    if (set === "roof" || set === "dream") {
+      box(14, 0.3, 9, 0, 0, 0, edge);
+      for (const x of [-4, 0, 4]) {
+        box(0.26, 3, 0.26, x, 1.5, -1, cream);
+        sign(
+          set === "roof" ? (x ? "未来可期" : "欠费停播") : "未完待续",
+          3,
+          0.85,
+          x,
+          3,
+          -0.81,
+        );
+        if (set === "dream") box(1.6, 0.15, 1.6, x, 0.3, 1.5, lime);
+      }
+    }
+
+    const characters = new Map<Npc, THREE.Group>();
+    for (const [id, info] of Object.entries(cast) as [
+      Npc,
+      (typeof cast)[Npc],
+    ][]) {
+      const actor = new THREE.Group();
+      const outfit = mat(info.color);
+      const cat = id === "cat" || id === "guard";
+      const skin = mat(cat ? (id === "guard" ? 0x9898a1 : 0xe3a461) : 0xd7b99e);
+      const add = (
+        w: number,
+        h: number,
+        d: number,
+        x: number,
+        y: number,
+        z: number,
+        m: THREE.Material,
+      ) => {
+        const part = box(w, h, d, x, y, z, m, actor);
+        part.userData.npc = id;
+        return part;
+      };
+      add(0.72, 0.88, 0.44, 0, 1, 0, outfit);
+      add(0.64, 0.62, 0.59, 0, 1.77, 0.04, skin);
+      for (const x of [-0.21, 0.21]) {
+        add(0.2, 0.62, 0.26, x, 0.36, 0, dark);
+        add(0.13, 0.54, 0.2, x * 2.08, 1, 0.01, outfit);
+        add(0.095, 0.07, 0.025, x * 0.78, 1.81, 0.347, dark);
+        if (cat)
+          add(0.19, 0.25, 0.2, x, 2.15, 0.01, skin).rotation.z =
+            x > 0 ? -0.27 : 0.27;
+      }
+      if (cat) {
+        add(0.11, 0.08, 0.07, 0, 1.7, 0.35, coral);
+        add(0.1, 0.44, 0.04, 0, 1.11, 0.24, coral);
+        if (id === "cat") add(0.39, 0.32, 0.2, 0.56, 0.69, 0.06, cream);
+      } else if (id === "driver" || id === "station" || id === "courier") {
+        add(0.72, 0.17, 0.68, 0, 2.05, 0.08, outfit);
+      } else if (id === "clerk") {
+        add(0.69, 0.09, 0.04, 0, 1.81, 0.36, dark);
+        add(0.17, 0.23, 0.04, 0.19, 1.17, 0.24, cream);
+      } else if (id === "keeper") {
+        add(0.45, 0.52, 0.04, 0, 0.91, 0.24, cream);
+      } else if (id === "cleaner") {
+        add(0.08, 1.7, 0.08, 0.55, 0.87, 0.1, cream);
+      }
+      actor.scale.setScalar(id === "child" ? 0.69 : 1.3);
+      actor.visible = false;
+      city.add(actor);
+      characters.set(id, actor);
+    }
     const train = new THREE.Group();
-    if (act === 2 || act === 5) {
+    if (set === "station" || set === "bus") {
       city.add(train);
       box(8, 1.5, 1.8, 0, 1.5, 3, coral, train).userData.inspect =
         "车票背面印着：不保证终点，保证同行。司机还没有熄火。";
@@ -218,6 +333,44 @@ export default function World({
       );
       stars.add(mesh);
     }
+    const frameScene = () => {
+      const { beat, focus, npcs } = current.current;
+      for (const [id, actor] of characters) {
+        const index = npcs.indexOf(id);
+        actor.visible = index !== -1;
+        actor.position.set((index - (npcs.length - 1) / 2) * 2.25, 0, 2.5);
+        actor.rotation.y = 0.2;
+      }
+      const interior =
+        set === "shop" ||
+        set === "office" ||
+        set === "board" ||
+        set === "bakery" ||
+        set === "home" ||
+        set === "queue";
+      const variation = ((focus % 13) - 6) * 0.75;
+      if (set === "shop" && !ending) {
+        const shots = [
+          [5, 4, 12],
+          [-1.4, 2.7, 8],
+          [-4, 3, 10],
+        ];
+        const [x, y, z] = shots[Math.min(beat, 2)];
+        camera.position.set(x, y, z);
+        camera.lookAt(beat === 2 ? -0.7 : 0, 0.62, 0);
+      } else {
+        camera.position.set(
+          (interior ? 4 : 9) + variation - (beat % 3) * 3,
+          (interior ? 4.5 : 7) - (beat % 3) * 0.9,
+          (interior ? 15 : 21) - (beat % 3) * 2.1,
+        );
+        camera.lookAt(0, 0.25, 1);
+      }
+      camera.fov = el.clientWidth < 650 ? 47 : 36;
+      camera.updateProjectionMatrix();
+      renderer.render(scene, camera);
+    };
+    redraw.current = frameScene;
     let frame = 0,
       dead = false;
     const motion = matchMedia("(prefers-reduced-motion: reduce)");
@@ -230,7 +383,7 @@ export default function World({
       renderer.setSize(w, h);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      renderer.render(scene, camera);
+      frameScene();
     };
     const observer = new ResizeObserver(resize);
     observer.observe(el);
@@ -250,14 +403,22 @@ export default function World({
       raycaster.setFromCamera(point, camera);
       const hit = raycaster
         .intersectObjects(city.children, true)
-        .find((h) => h.object.userData.inspect);
-      if (hit)
-        inspectionCallback.current?.(String(hit.object.userData.inspect));
+        .find(
+          (h) =>
+            h.object.visible &&
+            h.object.parent?.visible &&
+            (h.object.userData.inspect || h.object.userData.npc),
+        );
+      if (!hit) return;
+      const id = hit.object.userData.npc as Npc | undefined;
+      if (id) inspectionCallback.current?.(cast[id].line, id);
+      else inspectionCallback.current?.(String(hit.object.userData.inspect));
     };
     renderer.domElement.addEventListener("click", inspect);
     const lost = (e: Event) => {
       e.preventDefault();
       dead = true;
+      redraw.current = () => {};
       cancelAnimationFrame(frame);
       setUnavailable(true);
     };
@@ -285,6 +446,7 @@ export default function World({
     frame = requestAnimationFrame(draw);
     return () => {
       dead = true;
+      redraw.current = () => {};
       cancelAnimationFrame(frame);
       observer.disconnect();
       motion.removeEventListener("change", resume);
@@ -299,13 +461,18 @@ export default function World({
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [act, ending, paused]);
+  }, [set, ending, paused]);
   return (
-    <div className={`world act-${act} ${unavailable ? "world-fallback" : ""}`}>
+    <div
+      className={`world ${unavailable ? "world-fallback" : ""}`}
+      data-location={set}
+      data-beat={stage.beat}
+      style={unavailable ? { background: sets[set].color } : undefined}
+    >
       <div className="world-canvas" ref={host} aria-hidden="true" />
       <div className="world-overlay">
         <span className="world-dot" />
-        {labels[act - 1]}
+        {sets[set].label}
         <small>
           {unavailable ? "静态场景 · 剧情正常运行" : "微缩夜城 · 夜间营业"}
         </small>
@@ -321,7 +488,7 @@ export default function World({
       )}
       {unavailable && (
         <div className="fallback-city" aria-hidden="true">
-          ▥ ▥ <span>✳</span> ▥ ▥
+          <span>{sets[set].icon}</span>
         </div>
       )}
     </div>
