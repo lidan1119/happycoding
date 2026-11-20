@@ -3,7 +3,12 @@ import { createRoot } from "react-dom/client";
 import { Globe } from "./Globe";
 import { MapDialog, type MapLocation } from "./MapDialog";
 import { OriginPicker } from "./OriginPicker";
-import { countryAt, nearestCoast, type Geography } from "./geography";
+import {
+  countryAt,
+  nearestCoast,
+  type City,
+  type Geography,
+} from "./geography";
 import {
   antipode,
   beijing,
@@ -31,6 +36,8 @@ function EarthTrip() {
   const [unavailable, setUnavailable] = useState(false);
   const [geography, setGeography] = useState<Geography | null>(null);
   const [geoError, setGeoError] = useState(false);
+  const [cities, setCities] = useState<City[]>([]);
+  const [cityError, setCityError] = useState(false);
   const [share, setShare] = useState("");
   const [showLink, setShowLink] = useState(false);
   const [mapLocation, setMapLocation] = useState<MapLocation | null>(null);
@@ -58,6 +65,22 @@ function EarthTrip() {
       .then(setGeography)
       .catch(() => {
         if (!controller.signal.aborted) setGeoError(true);
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(import.meta.env.BASE_URL + "earth/cities.json", {
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error("城市数据加载失败");
+        return response.json();
+      })
+      .then(setCities)
+      .catch(() => {
+        if (!controller.signal.aborted) setCityError(true);
       });
     return () => controller.abort();
   }, []);
@@ -148,6 +171,9 @@ function EarthTrip() {
         <div className="globe">
           <Globe
             origin={origin}
+            cities={cities}
+            departureLabel={origin.name ?? "出发点"}
+            arrivalLabel={result?.country ? result.country + " · 落点" : "落点"}
             coastline={result?.coast?.point}
             onSelect={select}
             started={started}
@@ -201,7 +227,12 @@ function EarthTrip() {
           </div>
         </div>
         {!flying && !finished && (
-          <OriginPicker origin={origin} onSelect={select} />
+          <OriginPicker
+            origin={origin}
+            onSelect={select}
+            cities={cities}
+            cityError={cityError}
+          />
         )}
         <div className="play-controls">
           <button
@@ -279,6 +310,8 @@ function EarthTrip() {
       </section>
       {mapLocation && (
         <MapDialog
+          cities={cities}
+          geography={geography}
           location={mapLocation}
           onClose={() => setMapLocation(null)}
         />

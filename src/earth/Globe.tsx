@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { antipode, duration, type Coordinates } from "./trajectory";
-import { coordinatesOf, direction } from "./geography";
+import { coordinatesOf, direction, type City } from "./geography";
+import { cityPositions, drawGlobeLabels } from "./globeLabels";
 
 const vertex = `
 varying vec2 vUv;
@@ -44,6 +45,9 @@ const smooth = (t: number) => THREE.MathUtils.smootherstep(t, 0, 1);
 
 export function Globe({
   origin,
+  cities,
+  departureLabel,
+  arrivalLabel,
   coastline,
   onSelect,
   started,
@@ -51,16 +55,30 @@ export function Globe({
   onUnavailable,
 }: {
   origin: Coordinates;
+  cities: City[];
+  departureLabel: string;
+  arrivalLabel: string;
   coastline?: Coordinates;
   onSelect: (point: Coordinates) => void;
   started: number | null;
   finished: boolean;
   onUnavailable: () => void;
 }) {
+  const labels = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const zoomControl = useRef<(factor: number) => void>(() => {});
-  const position = useRef({ origin, coastline, onSelect, started, finished });
-  position.current = { origin, coastline, onSelect, started, finished };
+  const frameState = {
+    origin,
+    cities,
+    departureLabel,
+    arrivalLabel,
+    coastline,
+    onSelect,
+    started,
+    finished,
+  };
+  const position = useRef(frameState);
+  position.current = frameState;
 
   useEffect(() => {
     const element = canvas.current!;
@@ -81,6 +99,9 @@ export function Globe({
     const sun = new THREE.Vector3();
     let dirty = true;
     let lastElapsed = -1;
+    let previousCities: City[] | undefined;
+    let lastLabel = "";
+    let locations: ReturnType<typeof cityPositions> = [];
     const texture = new THREE.TextureLoader().load(
       import.meta.env.BASE_URL + "earth/earth.jpg",
       () => {
@@ -257,6 +278,11 @@ export function Globe({
         started: start,
         finished: done,
       } = position.current;
+      if (previousCities !== position.current.cities) {
+        previousCities = position.current.cities;
+        locations = cityPositions(previousCities);
+        dirty = true;
+      }
       if (previousOrigin !== selected) {
         previousOrigin = selected;
         departureDirection = direction(selected);
@@ -283,10 +309,14 @@ export function Globe({
         : start === null
           ? 0
           : Math.max(0, time - start);
-      if (!dirty && elapsed === lastElapsed) return;
+      const otherSide = elapsed >= 2500;
+      const label = otherSide
+        ? position.current.arrivalLabel
+        : position.current.departureLabel;
+      if (!dirty && elapsed === lastElapsed && lastLabel === label) return;
       dirty = false;
       lastElapsed = elapsed;
-      const otherSide = elapsed >= 2500;
+      lastLabel = label;
       const pin = otherSide ? arrivalDirection : departureDirection;
       const reveal = smooth((elapsed - 2750) / 2000);
       const dive = smooth(elapsed / 1370);
@@ -330,6 +360,17 @@ export function Globe({
       sun.y += otherSide ? 0.34 : 0.18;
       sun.normalize();
       renderer.render(scene, camera);
+      if (labels.current) {
+        drawGlobeLabels(
+          labels.current,
+          camera,
+          locations,
+          { name: label, position: pin },
+          canExplore() ? magnification : 0,
+          element.clientWidth,
+          element.clientHeight,
+        );
+      }
     });
     return () => {
       renderer.setAnimationLoop(null);
@@ -356,6 +397,7 @@ export function Globe({
   return (
     <>
       <canvas aria-label="地球与穿越落点" role="img" ref={canvas} />
+      <div className="globe-labels" ref={labels} aria-hidden="true" />
       {!flying && (
         <div className="globe-zoom" role="group" aria-label="地球缩放">
           <button

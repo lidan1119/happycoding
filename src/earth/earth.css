@@ -501,5 +501,82 @@ a:focus-visible {
 }
 
 /* The mobile copy column reserves room above its text for the globe. */
-.details { pointer-events: none; }
-.origin-picker, .play-controls, .share-link { pointer-events: auto; }
+.details {
+  pointer-events: none;
+}
+.origin-picker,
+.play-controls,
+.share-link {
+  pointer-events: auto;
+}
+
+.globe-labels {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.globe-labels span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  color: #fff2cf;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 650;
+  text-shadow:
+    0 1px 4px #050915,
+    1px 0 #050915,
+    -1px 0 #050915,
+    0 -1px #050915;
+}
+.globe-labels span::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  margin: 0 5px 2px -2px;
+  border-radius: 50%;
+  background: #ffe1a7;
+  box-shadow: 0 0 4px #182338;
+}
+
+.street-map {
+  background: #a6c5d3;
+}
+.local-map-notes {
+  padding: 0 18px 8px;
+  font-size: 12px;
+  color: #cfdbeb;
+}
+.local-map-notes p {
+  margin: 8px 0;
+}
+.nearby-cities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.nearby-cities button {
+  padding: 4px 8px;
+  border: 1px solid #5e788e;
+  border-radius: 3px;
+  background: #29374b;
+  color: #fff2cf;
+  font-size: 12px;
+}
+.local-place-name.leaflet-tooltip {
+  font-weight: 650;
+  padding: 1px 4px;
+  background: #f5f3e7;
+}
+
+.globe-labels .globe-focus {
+  color: #ffe1a7;
+  padding-left: 10px;
+}
+.globe-labels .globe-focus::before {
+  display: none;
+}

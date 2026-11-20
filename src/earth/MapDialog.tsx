@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef } from "react";
+import type { City, Geography } from "./geography";
 import type { Coordinates } from "./trajectory";
 
 const DetailMap = lazy(() => import("./DetailMap"));
@@ -7,9 +8,13 @@ export type MapLocation = { point: Coordinates; label: string; zoom: number };
 
 export function MapDialog({
   location,
+  cities,
+  geography,
   onClose,
 }: {
   location: MapLocation;
+  cities: City[];
+  geography: Geography | null;
   onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -58,7 +63,13 @@ export function MapDialog({
           </p>
         }
       >
-        <DetailMap point={point} label={label} zoom={zoom} />
+        <DetailMap
+          point={point}
+          label={label}
+          zoom={zoom}
+          cities={cities}
+          geography={geography}
+        />
       </Suspense>
       <footer className="map-footer">
         <a href={external.href} target="_blank" rel="noopener noreferrer">

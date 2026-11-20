@@ -5,12 +5,14 @@ import { parseCoordinates, type Origin } from "./trajectory";
 export function OriginPicker({
   origin,
   onSelect,
+  cities,
+  cityError,
 }: {
   origin: Origin;
   onSelect: (point: Origin) => void;
+  cities: City[];
+  cityError: boolean;
 }) {
-  const [cities, setCities] = useState<City[]>([]);
-  const [cityError, setCityError] = useState(false);
   const [query, setQuery] = useState("");
   const [lat, setLat] = useState(origin.lat.toFixed(5));
   const [lon, setLon] = useState(origin.lon.toFixed(5));
@@ -20,21 +22,6 @@ export function OriginPicker({
     setLon(origin.lon.toFixed(5));
     setError("");
   }, [origin]);
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch(import.meta.env.BASE_URL + "earth/cities.json", {
-      signal: controller.signal,
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error("城市数据加载失败");
-        return response.json();
-      })
-      .then(setCities)
-      .catch(() => {
-        if (!controller.signal.aborted) setCityError(true);
-      });
-    return () => controller.abort();
-  }, []);
   const search = query.trim().toLowerCase();
   const matches = search
     ? cities
