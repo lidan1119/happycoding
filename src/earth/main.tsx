@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Globe } from "./Globe";
+import { MapDialog, type MapLocation } from "./MapDialog";
 import { OriginPicker } from "./OriginPicker";
 import { countryAt, nearestCoast, type Geography } from "./geography";
 import {
@@ -32,6 +33,7 @@ function EarthTrip() {
   const [geoError, setGeoError] = useState(false);
   const [share, setShare] = useState("");
   const [showLink, setShowLink] = useState(false);
+  const [mapLocation, setMapLocation] = useState<MapLocation | null>(null);
   const handleUnavailable = useCallback(() => setUnavailable(true), []);
   const flying = started !== null && !finished;
   const destination = useMemo(() => antipode(origin), [origin]);
@@ -190,7 +192,7 @@ function EarthTrip() {
             ) : (
               <>
                 从{origin.name ?? "选定的坐标"}
-                出发。拖动地球查看各地，点击地表更换出发点。
+                出发。拖动和缩放地球，点击地表更换出发点。
               </>
             )}
           </p>
@@ -209,8 +211,48 @@ function EarthTrip() {
             {flying ? "跳到落点" : finished ? "再穿越一次" : "穿过去"}{" "}
             <span aria-hidden="true">↗</span>
           </button>
+          {!flying && (
+            <button
+              className="return"
+              type="button"
+              onClick={() =>
+                setMapLocation(
+                  finished
+                    ? {
+                        point: destination,
+                        label: "落点地图",
+                        zoom: result?.country ? 12 : 8,
+                      }
+                    : {
+                        point: origin,
+                        label: origin.name
+                          ? origin.name + " · 出发点地图"
+                          : "出发点地图",
+                        zoom: 13,
+                      },
+                )
+              }
+            >
+              {finished ? "查看落点地图" : "查看出发点地图"}
+            </button>
+          )}
           {finished && (
             <>
+              {result?.coast && (
+                <button
+                  className="return"
+                  type="button"
+                  onClick={() =>
+                    setMapLocation({
+                      point: result.coast!.point,
+                      label: "最近海岸地图",
+                      zoom: 12,
+                    })
+                  }
+                >
+                  查看海岸地图
+                </button>
+              )}
               <button className="return" type="button" onClick={back}>
                 更换出发点
               </button>
@@ -235,6 +277,12 @@ function EarthTrip() {
           />
         )}
       </section>
+      {mapLocation && (
+        <MapDialog
+          location={mapLocation}
+          onClose={() => setMapLocation(null)}
+        />
+      )}
       <footer className="credit">
         <a href="https://www.naturalearthdata.com/">Natural Earth 地理数据</a>
         <span> · 海陆与距离为估算</span>

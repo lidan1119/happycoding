@@ -58,6 +58,7 @@ export function Globe({
   onUnavailable: () => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const zoomControl = useRef<(factor: number) => void>(() => {});
   const position = useRef({ origin, coastline, onSelect, started, finished });
   position.current = { origin, coastline, onSelect, started, finished };
 
@@ -137,42 +138,75 @@ export function Globe({
     let arrivalDirection = direction(antipode(position.current.origin));
     let longitudeOffset = 0,
       latitudeOffset = 0;
-    let pointer:
-      { id: number; x: number; y: number; moved: boolean } | undefined;
+    let zoom = 1;
+    const pointers = new Map<
+      number,
+      { x: number; y: number; moved: boolean }
+    >();
     const ray = new THREE.Raycaster();
     const screen = new THREE.Vector2();
     const canExplore = () =>
       position.current.started === null || position.current.finished;
+    function zoomBy(factor: number) {
+      if (!canExplore()) return;
+      zoom = factor === 0 ? 1 : THREE.MathUtils.clamp(zoom * factor, 0.57, 12);
+      dirty = true;
+    }
+    zoomControl.current = zoomBy;
+    const wheel = (event: WheelEvent) => {
+      if (!canExplore()) return;
+      event.preventDefault();
+      const units =
+        event.deltaMode === 1
+          ? 16
+          : event.deltaMode === 2
+            ? element.clientHeight
+            : 1;
+      zoomBy(Math.exp(-event.deltaY * units * 0.0014));
+    };
     const down = (event: PointerEvent) => {
-      if (!canExplore() || event.button !== 0 || pointer) return;
-      pointer = {
-        id: event.pointerId,
+      if (!canExplore() || event.button !== 0 || pointers.size >= 2) return;
+      const moved = pointers.size !== 0;
+      if (moved) for (const point of pointers.values()) point.moved = true;
+      pointers.set(event.pointerId, {
         x: event.clientX,
         y: event.clientY,
-        moved: false,
-      };
+        moved,
+      });
       element.setPointerCapture(event.pointerId);
     };
     const move = (event: PointerEvent) => {
-      if (pointer?.id !== event.pointerId || !canExplore()) return;
-      const x = event.clientX - pointer.x,
-        y = event.clientY - pointer.y;
-      if (!pointer.moved && Math.hypot(x, y) < 6) return;
-      pointer = {
-        id: event.pointerId,
+      const point = pointers.get(event.pointerId);
+      if (!point || !canExplore()) return;
+      const x = event.clientX - point.x,
+        y = event.clientY - point.y;
+      const second = [...pointers.entries()].find(
+        ([id]) => id !== event.pointerId,
+      )?.[1];
+      if (second) {
+        const before = Math.hypot(point.x - second.x, point.y - second.y);
+        const after = Math.hypot(
+          event.clientX - second.x,
+          event.clientY - second.y,
+        );
+        if (before > 0 && after > 0) zoomBy(after / before);
+      } else {
+        if (!point.moved && Math.hypot(x, y) < 6) return;
+        longitudeOffset -= (x * 0.007) / Math.max(1, zoom);
+        latitudeOffset += (y * 0.006) / Math.max(1, zoom);
+        dirty = true;
+      }
+      pointers.set(event.pointerId, {
         x: event.clientX,
         y: event.clientY,
         moved: true,
-      };
-      longitudeOffset -= x * 0.007;
-      latitudeOffset += y * 0.006;
-      dirty = true;
+      });
     };
     const up = (event: PointerEvent) => {
-      if (pointer?.id !== event.pointerId) return;
-      const clicked = !pointer.moved && canExplore();
-      pointer = undefined;
-      if (!clicked) return;
+      const point = pointers.get(event.pointerId);
+      if (!point) return;
+      pointers.delete(event.pointerId);
+      if (point.moved || !canExplore()) return;
       const bounds = element.getBoundingClientRect();
       screen.set(
         ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
@@ -182,12 +216,14 @@ export function Globe({
       const hit = ray.intersectObject(earth, false)[0];
       if (hit) position.current.onSelect(coordinatesOf(hit.point.normalize()));
     };
-    const cancel = () => {
-      pointer = undefined;
+    const cancel = (event: PointerEvent) => {
+      pointers.delete(event.pointerId);
     };
+    element.addEventListener("wheel", wheel, { passive: false });
     element.addEventListener("pointerdown", down);
     element.addEventListener("pointermove", move);
     element.addEventListener("pointerup", up);
+    element.addEventListener("pointercancel", cancel);
     element.addEventListener("lostpointercapture", cancel);
     const heading = new THREE.Vector3();
     const axis = new THREE.Vector3(0, 1, 0);
@@ -228,6 +264,7 @@ export function Globe({
         putPin(pins[0], departureDirection);
         putPin(pins[1], arrivalDirection);
         longitudeOffset = latitudeOffset = 0;
+        zoom = 1;
         dirty = true;
       }
       if (previousCoastline !== coast) {
@@ -238,6 +275,7 @@ export function Globe({
       if (previousFinished !== done) {
         previousFinished = done;
         longitudeOffset = latitudeOffset = 0;
+        zoom = 1;
       }
       coastPin.visible = Boolean(done && coast);
       const elapsed = done
@@ -252,9 +290,14 @@ export function Globe({
       const pin = otherSide ? arrivalDirection : departureDirection;
       const reveal = smooth((elapsed - 2750) / 2000);
       const dive = smooth(elapsed / 1370);
+      const magnification = start === null || done ? zoom : 1;
       heading
         .copy(pin)
-        .applyAxisAngle(axis, otherSide ? -0.16 * reveal : 0.19 * (1 - dive));
+        .applyAxisAngle(
+          axis,
+          (otherSide ? -0.16 * reveal : 0.19 * (1 - dive)) /
+            Math.max(1, magnification),
+        );
       if (start === null || done) {
         spherical.setFromVector3(heading);
         spherical.theta += longitudeOffset;
@@ -268,7 +311,11 @@ export function Globe({
       const distance = otherSide
         ? THREE.MathUtils.lerp(1.27, narrow ? 3.55 : 3.12, reveal)
         : THREE.MathUtils.lerp(narrow ? 3.6 : 3.18, 1.16, dive);
-      camera.position.copy(heading).multiplyScalar(distance);
+      camera.position
+        .copy(heading)
+        .multiplyScalar(1 + (distance - 1) / magnification);
+      for (const ring of pins)
+        ring.scale.setScalar(1 / Math.max(1, magnification));
       camera.lookAt(look.set(0, narrow ? -0.05 : 0, 0));
       const framing = otherSide ? reveal : 1 - dive;
       camera.setViewOffset(
@@ -295,12 +342,48 @@ export function Globe({
       pinGeometry.dispose();
       pinMaterial.dispose();
       coastMaterial.dispose();
+      zoomControl.current = () => {};
+      element.removeEventListener("wheel", wheel);
       element.removeEventListener("pointerdown", down);
       element.removeEventListener("pointermove", move);
       element.removeEventListener("pointerup", up);
+      element.removeEventListener("pointercancel", cancel);
       element.removeEventListener("lostpointercapture", cancel);
       renderer.dispose();
     };
   }, [onUnavailable]);
-  return <canvas aria-label="地球与穿越落点" role="img" ref={canvas} />;
+  const flying = started !== null && !finished;
+  return (
+    <>
+      <canvas aria-label="地球与穿越落点" role="img" ref={canvas} />
+      {!flying && (
+        <div className="globe-zoom" role="group" aria-label="地球缩放">
+          <button
+            type="button"
+            aria-label="放大地球"
+            title="放大地球"
+            onClick={() => zoomControl.current(1.45)}
+          >
+            +
+          </button>
+          <button
+            type="button"
+            aria-label="缩小地球"
+            title="缩小地球"
+            onClick={() => zoomControl.current(1 / 1.45)}
+          >
+            −
+          </button>
+          <button
+            type="button"
+            aria-label="恢复默认缩放"
+            title="恢复默认缩放"
+            onClick={() => zoomControl.current(0)}
+          >
+            ↺
+          </button>
+        </div>
+      )}
+    </>
+  );
 }
